@@ -1,0 +1,1994 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>quED · E91 QKD Control</title>
+<style>
+  :root {
+    --bg: #0d1014;
+    --panel: #14181f;
+    --panel-2: #1a1f28;
+    --border: #2a313d;
+    --fg: #d4dce6;
+    --dim: #6b7585;
+    --accent: #7fdbca;
+    --warn: #f5b942;
+    --err: #ff6b6b;
+    --ok: #8ce99a;
+    --grid: rgba(127, 219, 202, 0.06);
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; height: 100%; }
+  body {
+    background:
+      linear-gradient(var(--grid) 1px, transparent 1px) 0 0 / 24px 24px,
+      linear-gradient(90deg, var(--grid) 1px, transparent 1px) 0 0 / 24px 24px,
+      var(--bg);
+    color: var(--fg);
+    font-family: 'JetBrains Mono', 'IBM Plex Mono', 'SF Mono', Menlo, Consolas, monospace;
+    font-size: 13px;
+    line-height: 1.55;
+    display: grid;
+    grid-template-rows: auto 1fr;
+    height: 100vh;
+  }
+  header {
+    border-bottom: 1px solid var(--border);
+    padding: 10px 18px;
+    display: flex;
+    align-items: center;
+    gap: 18px;
+    background: var(--panel);
+  }
+  header .logo {
+    font-weight: 700;
+    letter-spacing: 0.18em;
+    color: var(--accent);
+    font-size: 13px;
+  }
+  header .sub {
+    color: var(--dim);
+    font-size: 11px;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+  }
+  header .status {
+    margin-left: auto;
+    display: flex;
+    gap: 14px;
+    align-items: center;
+    font-size: 11px;
+    color: var(--dim);
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+  }
+  .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--dim); display: inline-block; margin-right: 6px; }
+  .dot.live { background: var(--ok); box-shadow: 0 0 8px var(--ok); }
+  .dot.busy { background: var(--warn); box-shadow: 0 0 8px var(--warn); animation: pulse 1.2s infinite; }
+  .dot.dead { background: var(--err); }
+  @keyframes pulse { 50% { opacity: 0.35; } }
+
+  main { display: grid; grid-template-columns: 380px 1fr; min-height: 0; }
+  aside {
+    border-right: 1px solid var(--border);
+    overflow-y: auto;
+    background: var(--panel);
+  }
+  section.console {
+    display: grid;
+    grid-template-rows: auto 1fr;
+    min-height: 0;
+  }
+
+  .group {
+    border-bottom: 1px solid var(--border);
+    padding: 14px 18px;
+  }
+  .group h2 {
+    margin: 0 0 10px 0;
+    font-size: 10px;
+    letter-spacing: 0.22em;
+    text-transform: uppercase;
+    color: var(--accent);
+    font-weight: 600;
+  }
+  .group .desc {
+    color: var(--dim);
+    font-size: 11px;
+    margin-bottom: 10px;
+  }
+  label {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 10px;
+    margin: 6px 0;
+    font-size: 12px;
+    color: var(--fg);
+  }
+  label > span:first-child { color: var(--dim); }
+  input[type=text], input[type=number] {
+    background: var(--bg);
+    border: 1px solid var(--border);
+    color: var(--fg);
+    font-family: inherit;
+    font-size: 12px;
+    padding: 5px 8px;
+    width: 160px;
+    border-radius: 2px;
+  }
+  input:focus { outline: none; border-color: var(--accent); }
+  input:disabled {
+    opacity: 0.35;
+    cursor: not-allowed;
+    text-decoration: line-through;
+  }
+  label:has(input:disabled) > span:first-child {
+    opacity: 0.5;
+  }
+  input[type=checkbox] { accent-color: var(--accent); }
+  select {
+    background: var(--bg);
+    border: 1px solid var(--border);
+    color: var(--fg);
+    font-family: inherit;
+    font-size: 12px;
+    padding: 4px 8px;
+    border-radius: 2px;
+  }
+
+  button {
+    background: transparent;
+    color: var(--accent);
+    border: 1px solid var(--accent);
+    padding: 7px 12px;
+    font-family: inherit;
+    font-size: 11px;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    cursor: pointer;
+    border-radius: 2px;
+    transition: background 120ms, color 120ms;
+    width: 100%;
+    margin-top: 8px;
+  }
+  button:hover:not(:disabled) { background: var(--accent); color: var(--bg); }
+  button:disabled { opacity: 0.35; cursor: not-allowed; }
+  button.danger { color: var(--err); border-color: var(--err); }
+  button.danger:hover:not(:disabled) { background: var(--err); color: var(--bg); }
+  button.ghost { color: var(--dim); border-color: var(--border); }
+  button.ghost:hover:not(:disabled) { background: var(--border); color: var(--fg); }
+
+  .toolbar {
+    border-bottom: 1px solid var(--border);
+    padding: 8px 14px;
+    background: var(--panel);
+    display: flex;
+    gap: 8px;
+    align-items: center;
+    font-size: 11px;
+    color: var(--dim);
+    text-transform: uppercase;
+    letter-spacing: 0.12em;
+  }
+  .toolbar button { width: auto; margin: 0; padding: 4px 10px; font-size: 10px; }
+  .toolbar .spacer { flex: 1; }
+
+  #log {
+    overflow-y: auto;
+    padding: 14px 18px;
+    background: var(--bg);
+    font-size: 12px;
+    white-space: pre-wrap;
+    word-break: break-word;
+  }
+  #log .line { margin: 0; padding: 1px 0; }
+  #log .ts { color: var(--dim); margin-right: 10px; }
+  #log .info { color: var(--fg); }
+  #log .ok { color: var(--ok); }
+  #log .warn { color: var(--warn); }
+  #log .err { color: var(--err); }
+  #log .head { color: var(--accent); border-bottom: 1px dashed var(--border); padding-bottom: 4px; margin-top: 10px; margin-bottom: 4px; letter-spacing: 0.08em; }
+  #log .dim { color: var(--dim); }
+
+  .row { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="logo">QUED · E91</div>
+  <div class="sub">Entanglement-Based QKD Control</div>
+  <div class="status">
+    <div><span class="dot" id="wsDot"></span><span id="wsText">ws offline</span></div>
+    <div><span class="dot" id="busyDot"></span><span id="busyText">idle</span></div>
+  </div>
+</header>
+
+<main>
+  <aside>
+
+    <div class="group">
+      <h2>0 · Connection</h2>
+      <label><span>quED host</span><input type="text" id="host" value="localhost"></label>
+      <label><span>REST port</span><input type="number" id="restPort" value="8082"></label>
+      <label><span>WS port</span><input type="number" id="wsPort" value="8081"></label>
+      <label><span>Alice motor (HWP)</span>
+        <select id="aliceMotor">
+          <option value="0">0</option><option value="1">1</option>
+          <option value="2" selected>2</option><option value="3">3</option>
+        </select>
+      </label>
+      <label><span>Bob motor (HWP)</span>
+        <select id="bobMotor">
+          <option value="0">0</option><option value="1">1</option>
+          <option value="2">2</option><option value="3" selected>3</option>
+        </select>
+      </label>
+      <label><span>Channel</span>
+        <select id="dataChannel">
+          <option value="6" selected>6 — event counter (raw, recommended)</option>
+          <option value="8">8 — coincidences (display, may be ×10 scaled)</option>
+          <option value="9">9 — singles ch1</option>
+          <option value="10">10 — singles ch2</option>
+        </select>
+      </label>
+      <label><span>Event-ctr exposure (ms)</span><input type="number" id="ecExpMs" value="1000" min="10" max="1000"></label>
+      <button id="btnConnect">Connect WebSocket</button>
+      <button id="btnSetExp" class="ghost">Push exposure to device</button>
+      <button id="btnPing" class="ghost">Ping (read 1 sample)</button>
+    </div>
+
+    <div class="group">
+      <h2>0.5 · Laser power tuning</h2>
+      <div class="desc">Find the laser power that produces ~1 coincidence per integration window (P(k=1) is maximized when rate λ=1, value 1/e ≈ 0.368). Uses bisection on channel 6.</div>
+      <div class="row">
+        <label><span>Power min</span><input type="number" id="laserMin" value="0" min="0"></label>
+        <label><span>Power max</span><input type="number" id="laserMax" value="100" min="0"></label>
+        <label><span>Samples / level</span><input type="number" id="laserSamples" value="20" min="5"></label>
+        <label><span>Settle (ms)</span><input type="number" id="laserSettle" value="500" min="0"></label>
+      </div>
+      <label><span>Target rate (counts/win)</span><input type="number" id="laserTarget" value="1" min="0.1" step="0.1"></label>
+      <label><span>Bisection iterations</span><input type="number" id="laserIters" value="7" min="3" max="15"></label>
+      <button id="btnLaserTune">Bisection search</button>
+      <button id="btnLaserScan" class="ghost">Linear scan (15 pts)</button>
+      <button id="btnLaserSet" class="ghost">Set power manually →</button>
+      <input type="number" id="laserManual" value="50" style="width:100%; margin-top:6px;">
+    </div>
+
+    <div class="group">
+      <h2>1 · Calibration sweep</h2>
+      <div class="desc">Park Alice's motor at the specified angle, sweep Bob's HWP, record counts on the selected channel.</div>
+      <div class="row">
+        <label><span>Park Alice °</span><input type="number" id="calPark" value="0"></label>
+        <label><span>Samples / pt</span><input type="number" id="calSamples" value="3" min="1"></label>
+        <label><span>Start °</span><input type="number" id="calStart" value="0"></label>
+        <label><span>End °</span><input type="number" id="calEnd" value="180"></label>
+        <label><span>Step °</span><input type="number" id="calStep" value="5"></label>
+      </div>
+      <label><span>Settle after move (ms)</span><input type="number" id="settleMs" value="800" min="0"></label>
+      <button id="btnCalSweep">Run sweep</button>
+      <button id="btnCalFit" class="ghost">Fit cosine → bob_offset</button>
+      <button id="btnCalSave" class="ghost">Download calibration CSV</button>
+      <svg id="calPlot" viewBox="0 0 360 220" preserveAspectRatio="none"
+           style="width:100%; height:200px; margin-top:14px; background:var(--bg); border:1px solid var(--border); border-radius:2px; display:none;"></svg>
+    </div>
+
+    <div class="group">
+      <h2>2 · Generate bases &amp; bits</h2>
+      <div class="desc">Random bases (3 angles, 120° apart) and bits (0 or 1 → +90°) for Alice and Bob.</div>
+      <label><span>Length</span><input type="number" id="length" value="500" min="1"></label>
+      <label><span>Bob offset °</span><input type="number" id="bobOffset" value="5"></label>
+      <button id="btnGenBases">Generate</button>
+    </div>
+
+    <div class="group">
+      <h2>3 · Run QKD experiment</h2>
+      <div class="desc">For each pair (a<sub>i</sub>, b<sub>i</sub>) rotate HWPs, wait for motion to finish, average N samples on the chosen channel.</div>
+      <label><span>Samples / point</span><input type="number" id="numTrials" value="3" min="1"></label>
+      <label><span>Sum over N packets</span><input type="checkbox" id="useIntegration"></label>
+      <label><span>Packets per trial</span><input type="number" id="packetsPerTrial" value="3" min="1" disabled></label>
+      <label><span>Reorder for short moves</span><input type="checkbox" id="optReorder" checked></label>
+      <label><span>Group by (α,β)</span><input type="checkbox" id="optGroup" checked></label>
+      <button id="btnRunExp">Run experiment</button>
+      <button id="btnAbort" class="danger">Abort</button>
+    </div>
+
+    <div class="group">
+      <h2>4 · Save / Load CSV</h2>
+      <button id="btnSaveCsv">Download CSVs</button>
+      <button id="btnLoadCsv" class="ghost">Load CSVs…</button>
+      <input type="file" id="loadInput" multiple accept=".csv" style="display:none">
+    </div>
+
+    <div class="group">
+      <h2>5 · Post-processing</h2>
+      <div class="desc">Sift, compute QBER, secure key rate (Devetak-Winter), and Eve detection.</div>
+      <label><span>Detection threshold</span><input type="number" id="detThresh" value="1" step="any"></label>
+      <button id="btnSift">Sift &amp; analyze</button>
+      <button id="btnBuckets" class="ghost">Show per-bucket counts</button>
+    </div>
+
+    <div class="group">
+      <h2>6 · Modified E91 (probabilistic sift)</h2>
+      <div class="desc">For each trial, accept it as a "logical coincidence" with probability p = (n − n<sub>min</sub>) / (n<sub>max</sub> − n<sub>min</sub>), where n is that trial's coincidence count. n<sub>min</sub> defaults to the calibration's trough (C − A, counts at 90° relative angle); n<sub>max</sub> defaults to the peak (A + C). Override below if needed.</div>
+      <label><span>n_min (override)</span><input type="number" id="nMinOverride" value="" placeholder="from cal fit C" step="any"></label>
+      <label><span>n_max (override)</span><input type="number" id="nMaxOverride" value="" placeholder="from cal fit A+C" step="any"></label>
+      <label><span>Repeat coin flips</span><input type="number" id="coinReps" value="1" min="1"></label>
+      <button id="btnModSift">Modified sift &amp; analyze</button>
+      <button id="btnUseFit" class="ghost">Use cal fit values</button>
+    </div>
+
+  </aside>
+
+  <section class="console">
+    <div class="toolbar">
+      <span>Console</span>
+      <div class="spacer"></div>
+      <button id="btnClear" class="ghost">Clear</button>
+      <button id="btnExportLog" class="ghost">Export log</button>
+    </div>
+    <div id="log"></div>
+  </section>
+</main>
+
+<script>
+/* ============================================================
+   quED interface — WebSocket + REST.
+   --------------------------------
+   The quED firmware speaks two protocols in parallel:
+
+     • REST API on the same port as the web UI (default 8082).
+       Settings are sent with `PUT /api/v1/...` and a JSON body
+       like `{"value": 45}`. Reads are GET on the same path.
+       Routes are listed in routes.js; the ones we use are:
+         /api/v1/qued/motors/target/{0..3}    set target angle (PUT)
+         /api/v1/qued/motors/position/{0..3}  current angle    (GET)
+         /api/v1/qued/motors/state/{0..3}     0 idle, !=0 moving
+         /api/v1/qued/measure/count-rate/exposure-time
+
+     • WebSocket on port 8081 — sole data path for live counts.
+       The server pushes JSON every exposure window. Two shapes:
+         { "info": {...}, "data": {...}, "start": ... }   → plot data
+         { "update": { "route": "...", "value": ... } }   → settings
+       For counts/coincidences, info.index identifies the channel:
+            8 → coincidences           (data.raw[0].val)
+            9 → singles detector 1
+           10 → singles detector 2
+       (decoded from quedu_socket.js + quedu_plot.js)
+   ============================================================ */
+
+let WS = null;
+let LATEST = { 6: null, 8: null, 9: null, 10: null };  // most recent val on each channel
+let MSG_COUNT = 0;
+let ABORT = false;
+let BUSY  = false;
+
+/* ---------- UI state helpers -------------------------------- */
+function setBusy(b) {
+  BUSY = b;
+  const dot = document.getElementById('busyDot');
+  const txt = document.getElementById('busyText');
+  if (b) { dot.className = 'dot busy'; txt.textContent = 'busy'; }
+  else   { dot.className = 'dot live'; txt.textContent = 'idle'; }
+}
+function setWS(state) {
+  const dot = document.getElementById('wsDot');
+  const txt = document.getElementById('wsText');
+  if (state === 'live')      { dot.className = 'dot live'; txt.textContent = 'ws online'; }
+  else if (state === 'dead') { dot.className = 'dot dead'; txt.textContent = 'ws error'; }
+  else                       { dot.className = 'dot';      txt.textContent = 'ws offline'; }
+}
+
+/* ---------- logging ----------------------------------------- */
+const logEl = () => document.getElementById('log');
+function ts() { return new Date().toTimeString().slice(0, 8); }
+function log(msg, cls = 'info') {
+  const el = logEl();
+  const line = document.createElement('div');
+  line.className = 'line';
+  line.innerHTML = `<span class="ts">${ts()}</span><span class="${cls}">${escapeHtml(String(msg))}</span>`;
+  el.appendChild(line);
+  el.scrollTop = el.scrollHeight;
+}
+function logHead(text) {
+  const el = logEl();
+  const line = document.createElement('div');
+  line.className = 'line head';
+  line.textContent = '── ' + text + ' ' + '─'.repeat(Math.max(0, 60 - text.length));
+  el.appendChild(line);
+  el.scrollTop = el.scrollHeight;
+}
+function escapeHtml(s) {
+  return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+}
+
+/* ---------- numeric helpers --------------------------------- */
+const sleep = (ms) => new Promise(r => setTimeout(r, ms));
+const sum   = a => a.reduce((s, x) => s + x, 0);
+const mean  = a => a.length ? sum(a) / a.length : 0;
+const variance = a => {
+  if (!a.length) return 0;
+  const m = mean(a);
+  return a.reduce((s, x) => s + (x - m) ** 2, 0) / a.length;
+};
+const linspaceRange = (start, end, step) => {
+  const out = [];
+  for (let v = start; v < end; v += step) out.push(v);
+  return out;
+};
+const randInt = (lo, hi) => Math.floor(Math.random() * (hi - lo + 1)) + lo;
+const zeros = (n) => Array(n).fill(0);
+const isclose = (a, b, tol = 1e-9) => Math.abs(a - b) <= tol;
+
+/* ============================================================
+   REST helpers
+   ============================================================ */
+function restBase() {
+  const host = document.getElementById('host').value.trim();
+  const port = document.getElementById('restPort').value.trim();
+  return `http://${host}:${port}`;
+}
+
+async function restPut(path, value) {
+  const url = restBase() + path;
+  const resp = await fetch(url, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ value: Number(value) }),
+  });
+  if (!resp.ok) throw new Error(`PUT ${path} → ${resp.status}`);
+  return resp;
+}
+
+async function restGet(path) {
+  const url = restBase() + path;
+  const resp = await fetch(url);
+  if (!resp.ok) throw new Error(`GET ${path} → ${resp.status}`);
+  // Some endpoints return JSON, some return raw numbers — try JSON first.
+  const text = await resp.text();
+  try { return JSON.parse(text); }
+  catch { return text; }
+}
+
+/* ----- motor commands ---------------------------------------
+   The quED has 4 HWP motors (indices 0..3).
+   The firmware uses STEPS, not degrees, on the target endpoint.
+   Per quedu_experiments.js (`ed_motor_set` line 319):
+       angle_send = angle / 360 * 4800
+   i.e. one full revolution = 4800 motor steps.
+   To move one motor:
+     1. PUT target/<i>  with the desired angle CONVERTED TO STEPS
+     2. PUT move/<i>    with value 1
+        (per quedu_actors.js: 0=stop, 1=goto-target, 2=left, 3=right)
+
+   We CANNOT use motors/state to know when motion completes — empirical
+   testing (set target, send move=1, then poll state while the motor is
+   still visibly spinning) shows state=0 throughout. So state is not a
+   busy flag in this firmware; it's something else (limit / error code?).
+
+   Instead we estimate motion duration from the distance traveled and
+   a conservative speed. STEPS_PER_SEC is the worst-case speed of the
+   HWP motors; raise it if your motors move faster, lower it if you
+   see overlapping commands again.
+
+   Note: this is the PHYSICAL motor rotation, not the polarization
+   rotation. A HWP rotates the polarization by 2× its physical rotation.
+*/
+const STEPS_PER_REV  = 4800;
+const STEPS_PER_SEC  = 800;     // conservative HWP rotation speed
+const MOVE_OVERHEAD_MS = 250;   // command latency + decel margin
+const degToSteps = (deg) => deg * STEPS_PER_REV / 360;
+
+let _motorPosSteps = [0, 0, 0, 0];   // our best guess of where each motor is
+
+async function motorSet(idx, deg) {
+  // Firmware silently rejects non-integer target values, so round.
+  const targetSteps = Math.round(degToSteps(deg));
+  const distance    = Math.abs(targetSteps - _motorPosSteps[idx]);
+  const moveMs      = (distance / STEPS_PER_SEC) * 1000 + MOVE_OVERHEAD_MS;
+  log(`  motorSet(${idx}, ${deg}°)  → target=${targetSteps} steps, ${distance} steps to travel, wait ${moveMs.toFixed(0)} ms`, 'dim');
+  await restPut(`/api/v1/qued/motors/target/${idx}`, targetSteps);
+  await restPut(`/api/v1/qued/motors/move/${idx}`,   1);
+  await sleep(moveMs);
+  _motorPosSteps[idx] = targetSteps;
+}
+
+/* ----- parallel motor commands ------------------------------
+   motorSet sends commands AND waits, which means two sequential
+   calls take wait_A + wait_B time even though the motors could
+   physically move at the same time. motorSetMany fires all the
+   target+move commands first, then waits ONCE for the longest
+   move to finish. This roughly halves trial time when both
+   motors are moving comparable distances.
+*/
+async function motorSetMany(commands) {
+  const plans = commands.map(c => {
+    const targetSteps = Math.round(degToSteps(c.deg));
+    const distance    = Math.abs(targetSteps - _motorPosSteps[c.idx]);
+    const moveMs      = (distance / STEPS_PER_SEC) * 1000 + MOVE_OVERHEAD_MS;
+    return { ...c, targetSteps, distance, moveMs };
+  });
+  await Promise.all(plans.map(p =>
+    restPut(`/api/v1/qued/motors/target/${p.idx}`, p.targetSteps)
+  ));
+  await Promise.all(plans.map(p =>
+    restPut(`/api/v1/qued/motors/move/${p.idx}`, 1)
+  ));
+  const maxWait = Math.max(...plans.map(p => p.moveMs));
+  log(`  motorSetMany  → ${plans.map(p => `m${p.idx}=${p.deg}°`).join(', ')}  wait ${maxWait.toFixed(0)} ms`, 'dim');
+  await sleep(maxWait);
+  for (const p of plans) _motorPosSteps[p.idx] = p.targetSteps;
+}
+
+// Reset our internal "where are the motors" tracker if the user has
+// moved them outside our control (e.g. via the quEDU web UI).
+function resetMotorTracking() {
+  _motorPosSteps = [0, 0, 0, 0];
+  log('motor position tracking reset to 0 — first move from each motor will assume it was at 0', 'warn');
+}
+window.resetMotorTracking = resetMotorTracking;
+
+/* ----- event-counter exposure limit -------------------------
+   The event counter (channel 6) integrates over a configurable
+   window. The quEDU UI converts UI-milliseconds to device units
+   via:     device_value = ms / 16 * 1000     (~62500 for 1000ms)
+   We push the UI value through the same conversion so the field
+   reads in friendly milliseconds. The reverse decoder used by
+   the device's update handler is `ui_ms = device_val * 16 / 1000`.
+
+   This setting affects how often channel-6 messages arrive AND
+   how many photons are integrated into each one. Longer exposure
+   = fewer messages with higher counts and lower Poisson noise.
+*/
+async function setEventCounterExposure() {
+  const ms = +document.getElementById('ecExpMs').value;
+  const deviceValue = ms / 16 * 1000;
+  log(`setting event-counter exposure: ${ms} ms (device value: ${deviceValue.toFixed(0)})`, 'dim');
+  try {
+    await restPut('/api/v1/quedu/measure/event-counter/exposure-limit', deviceValue);
+    log('exposure pushed to device', 'ok');
+  } catch (e) {
+    log('failed: ' + e.message, 'err');
+  }
+}
+
+/* ============================================================
+   Laser power tuning
+   --------------------------------------------------------------
+   The diode pump current controls the SPDC pair rate. The UI in
+   the original quEDU sends `slider_value * 100` to the
+   /api/v1/qued/laser/power endpoint, so we mirror that mapping.
+   We expose "UI units" (probably 0..100 on the original slider)
+   to the user; the device sees those × 100.
+
+   Goal: find the UI value where channel-6 coincidence rate
+   averages closest to 1 count per integration window — that
+   maximizes P(exactly 1 count) at 1/e ≈ 0.368.
+
+   Method: bisection. The rate-vs-power curve is monotonic, so
+   midpoint averaging halves the bracket each iteration. With N
+   samples per level (default 20) the rate estimate has Poisson
+   error ≈ √λ/√N ≈ √1/√20 ≈ 0.22 — tight enough to bisect
+   reliably down to a useful precision in 6-7 iterations.
+   ============================================================ */
+
+const LASER_POWER_MULT = 100;  // matches original UI: device = ui_value * 100
+
+async function setLaserPower(uiValue) {
+  await restPut('/api/v1/qued/laser/power', uiValue * LASER_POWER_MULT);
+}
+
+/* Measure the mean coincidence rate at a given laser power.
+   Returns { mean, n, hist1Frac } where hist1Frac is the empirical
+   fraction of windows with exactly 1 count (the actual quantity
+   we'd most like to maximize, but it's noisier so we tune on mean).
+*/
+async function measureRateAtPower(uiValue, nSamples, settleMs, ch) {
+  await setLaserPower(uiValue);
+  await sleep(settleMs);  // let laser stabilize
+
+  const samples = [];
+  // Discard first sample — its window may have started before the
+  // power change took effect.
+  await readOneSample(ch, 8000);
+  for (let i = 0; i < nSamples; i++) {
+    if (ABORT) throw new Error('aborted');
+    samples.push(await readOneSample(ch, 8000));
+  }
+  const m = mean(samples);
+  const ones = samples.filter(v => Math.round(v) === 1).length;
+  return { mean: m, n: samples.length, hist1Frac: ones / samples.length, samples };
+}
+
+async function laserBisectionTune() {
+  if (BUSY) return;
+  ABORT = false;
+  setBusy(true);
+  logHead('LASER BISECTION TUNE');
+
+  if (!WS || WS.readyState !== WebSocket.OPEN) {
+    log('websocket not connected', 'err'); setBusy(false); return;
+  }
+
+  let lo = +document.getElementById('laserMin').value;
+  let hi = +document.getElementById('laserMax').value;
+  const nSamples = Math.max(5, +document.getElementById('laserSamples').value);
+  const settle   = Math.max(0, +document.getElementById('laserSettle').value);
+  const target   = +document.getElementById('laserTarget').value;
+  const iters    = Math.max(3, +document.getElementById('laserIters').value);
+  const ch       = 6;  // event counter
+
+  log(`bracket [${lo}, ${hi}], target rate = ${target} ct/win, ${nSamples} samples/level, ${iters} iterations`);
+
+  try {
+    // Step 1 — measure at both endpoints to confirm the bracket
+    log('measuring lower bound…');
+    const rLo = await measureRateAtPower(lo, nSamples, settle, ch);
+    log(`  power=${lo}: rate=${rLo.mean.toFixed(3)}  P(=1)=${rLo.hist1Frac.toFixed(3)}`, 'ok');
+
+    log('measuring upper bound…');
+    const rHi = await measureRateAtPower(hi, nSamples, settle, ch);
+    log(`  power=${hi}: rate=${rHi.mean.toFixed(3)}  P(=1)=${rHi.hist1Frac.toFixed(3)}`, 'ok');
+
+    if (rLo.mean > target && rHi.mean > target) {
+      log(`both bounds above target (${target}). Lower the laserMin or extend below.`, 'warn');
+      setBusy(false); return;
+    }
+    if (rLo.mean < target && rHi.mean < target) {
+      log(`both bounds below target (${target}). Raise laserMax or extend above.`, 'warn');
+      setBusy(false); return;
+    }
+
+    // Step 2 — bisect
+    let history = [{ power: lo, ...rLo }, { power: hi, ...rHi }];
+    for (let it = 0; it < iters; it++) {
+      if (ABORT) break;
+      const mid = (lo + hi) / 2;
+      log(`iter ${it + 1}/${iters}: probing power=${mid.toFixed(2)}…`);
+      const rMid = await measureRateAtPower(mid, nSamples, settle, ch);
+      log(`  power=${mid.toFixed(2)}: rate=${rMid.mean.toFixed(3)}  P(=1)=${rMid.hist1Frac.toFixed(3)}`,
+          Math.abs(rMid.mean - target) < 0.2 ? 'ok' : 'info');
+      history.push({ power: mid, ...rMid });
+
+      // Decide which half to keep
+      if (rMid.mean < target) {
+        lo = mid;
+      } else {
+        hi = mid;
+      }
+    }
+
+    // Step 3 — pick the level closest to target overall
+    history.sort((a, b) => Math.abs(a.mean - target) - Math.abs(b.mean - target));
+    const best = history[0];
+    log('', 'info');
+    log('═══ BEST POWER ═══', 'ok');
+    log(`UI value:           ${best.power.toFixed(2)}`, 'ok');
+    log(`device value:       ${(best.power * LASER_POWER_MULT).toFixed(0)}`, 'dim');
+    log(`mean rate:          ${best.mean.toFixed(3)} ct/win`, 'ok');
+    log(`P(exactly 1):       ${best.hist1Frac.toFixed(3)}  (theoretical max: ${(1/Math.E).toFixed(3)})`, 'ok');
+    log('setting device to this power and leaving it there…');
+    await setLaserPower(best.power);
+    document.getElementById('laserManual').value = best.power.toFixed(2);
+
+    // Final confirmation measurement
+    log('confirming…');
+    const rConfirm = await measureRateAtPower(best.power, nSamples * 2, settle, ch);
+    log(`confirmed: rate=${rConfirm.mean.toFixed(3)}  P(=1)=${rConfirm.hist1Frac.toFixed(3)}`, 'ok');
+
+    window.laserTuneHistory = history;
+    log('history exposed on window.laserTuneHistory', 'dim');
+  } catch (e) {
+    log('error: ' + e.message, 'err');
+  }
+  setBusy(false);
+}
+
+async function laserLinearScan() {
+  if (BUSY) return;
+  ABORT = false;
+  setBusy(true);
+  logHead('LASER LINEAR SCAN');
+
+  if (!WS || WS.readyState !== WebSocket.OPEN) {
+    log('websocket not connected', 'err'); setBusy(false); return;
+  }
+  const lo = +document.getElementById('laserMin').value;
+  const hi = +document.getElementById('laserMax').value;
+  const nSamples = Math.max(5, +document.getElementById('laserSamples').value);
+  const settle   = Math.max(0, +document.getElementById('laserSettle').value);
+  const ch       = 6;
+  const N_POINTS = 15;
+  const points = [];
+  for (let i = 0; i < N_POINTS; i++) points.push(lo + (hi - lo) * i / (N_POINTS - 1));
+
+  log(`scanning ${N_POINTS} levels in [${lo}, ${hi}]`);
+  const results = [];
+  for (let i = 0; i < points.length; i++) {
+    if (ABORT) break;
+    const p = points[i];
+    const r = await measureRateAtPower(p, nSamples, settle, ch);
+    results.push({ power: p, ...r });
+    log(`  [${i+1}/${N_POINTS}] power=${p.toFixed(2)}  rate=${r.mean.toFixed(3)}  P(=1)=${r.hist1Frac.toFixed(3)}`);
+  }
+
+  // Find best
+  const target = +document.getElementById('laserTarget').value;
+  results.sort((a, b) => Math.abs(a.mean - target) - Math.abs(b.mean - target));
+  const best = results[0];
+  log('', 'info');
+  log('═══ BEST FROM SCAN ═══', 'ok');
+  log(`UI value: ${best.power.toFixed(2)}  rate=${best.mean.toFixed(3)}  P(=1)=${best.hist1Frac.toFixed(3)}`, 'ok');
+  await setLaserPower(best.power);
+  document.getElementById('laserManual').value = best.power.toFixed(2);
+  window.laserScanResults = results;
+  setBusy(false);
+}
+
+async function laserSetManual() {
+  if (BUSY) return;
+  const p = +document.getElementById('laserManual').value;
+  log(`setting laser power to ${p} (device value: ${p * LASER_POWER_MULT})`);
+  try { await setLaserPower(p); log('done', 'ok'); }
+  catch (e) { log('failed: ' + e.message, 'err'); }
+}
+// motorWaitIdle is a no-op. We rely on the time-based wait inside
+// motorSet/motorSetMany (computed from distance and STEPS_PER_SEC).
+// The state endpoint always returns 0, so polling it never tells us
+// anything useful — see motorSet comment block.
+async function motorWaitIdle(idx, timeoutMs = 15000) { /* no-op */ }
+
+/* ============================================================
+   WebSocket
+   The server expects ANY message after connection ("Hello..."
+   in the original UI is just a kick to start the stream).
+   ============================================================ */
+function connectWS() {
+  if (WS && WS.readyState === WebSocket.OPEN) {
+    log('already connected', 'warn');
+    return;
+  }
+  const host = document.getElementById('host').value.trim();
+  const port = document.getElementById('wsPort').value.trim();
+  const url  = `ws://${host}:${port}`;
+  log('connecting to ' + url + ' …');
+
+  try {
+    WS = new WebSocket(url);
+  } catch (e) {
+    log('ws construct error: ' + e.message, 'err');
+    setWS('dead');
+    return;
+  }
+
+  WS.onopen = () => {
+    setWS('live');
+    log('websocket open', 'ok');
+    // The reference UI sends a kickoff message — match that.
+    try { WS.send('Hello from Webclient!'); } catch (_) {}
+  };
+
+  WS.onmessage = (ev) => {
+    let m;
+    try { m = JSON.parse(ev.data); }
+    catch { return; }
+    MSG_COUNT++;
+    if (m && m.info && m.data && m.data.raw && m.data.raw.length) {
+      const ch = parseInt(m.info.index, 10);
+      const v  = Number(m.data.raw[0].val);
+      if (Number.isFinite(v) && (ch === 6 || ch === 8 || ch === 9 || ch === 10)) {
+        LATEST[ch] = { val: v, t: performance.now() };
+      }
+    }
+  };
+
+  WS.onerror = (e) => {
+    setWS('dead');
+    log('ws error — see devtools console', 'err');
+  };
+
+  WS.onclose = () => {
+    setWS('off');
+    log('ws closed', 'warn');
+  };
+}
+
+/* ----- read one fresh sample on the selected channel --------
+   We mark the current LATEST timestamp, then wait for a newer
+   one to arrive. This guarantees the value reflects conditions
+   AFTER any motor moves we just did.
+*/
+async function readOneSample(channel, timeoutMs = 5000) {
+  if (!WS || WS.readyState !== WebSocket.OPEN) {
+    throw new Error('websocket not connected — click "Connect WebSocket" first');
+  }
+  const before = LATEST[channel] ? LATEST[channel].t : -1;
+  const t0 = Date.now();
+  while (Date.now() - t0 < timeoutMs) {
+    if (ABORT) throw new Error('aborted');
+    if (LATEST[channel] && LATEST[channel].t > before) return LATEST[channel].val;
+    await sleep(40);
+  }
+  throw new Error(`no message on channel ${channel} within ${timeoutMs}ms`);
+}
+
+/* ----- sum all messages arriving over a fixed time window ---
+   This is our own software-side integration. The quED pushes
+   coincidence updates over the WebSocket every ~100 ms. Over a
+   1000 ms window we catch ~10 of them and sum them up to get a
+   total coincidence count over that 1 second.
+
+   Returns: { sum, n_messages, actual_window_ms }
+   - sum is the summed count rate values across all messages received
+   - n_messages tells you how many WS pushes landed in the window
+     (useful sanity check — should be roughly windowMs / 100)
+   - actual_window_ms is the real elapsed time, which can drift
+     slightly from the requested windowMs
+
+   We start the window only after seeing one fresh message to
+   avoid double-counting any message that arrived during the
+   preceding motor-settle period.
+*/
+async function readSumOverWindow(channel, windowMs) {
+  if (!WS || WS.readyState !== WebSocket.OPEN) {
+    throw new Error('websocket not connected — click "Connect WebSocket" first');
+  }
+  // Wait for one fresh sample, then start counting from THAT moment.
+  // This avoids picking up stale data from before motors finished moving.
+  await readOneSample(channel, 5000);
+  const startT = LATEST[channel].t;
+  let sum = 0;
+  let n   = 0;
+  let lastSeen = startT;
+  // Include the seed message itself in the sum
+  sum += LATEST[channel].val;
+  n   += 1;
+
+  const deadlineWall = Date.now() + windowMs;
+  while (Date.now() < deadlineWall) {
+    if (ABORT) throw new Error('aborted');
+    if (LATEST[channel] && LATEST[channel].t > lastSeen) {
+      sum += LATEST[channel].val;
+      n   += 1;
+      lastSeen = LATEST[channel].t;
+    }
+    await sleep(20);
+  }
+  return { sum, n_messages: n, actual_window_ms: performance.now() - startT };
+}
+
+/* ----- sum exactly N device-integrated packets --------------
+   Cleaner alternative to readSumOverWindow: instead of waiting
+   for a wall-clock duration and seeing how many messages arrive,
+   collect EXACTLY N fresh messages and sum their values.
+
+   Why this is better:
+     • Every trial integrates over exactly N × hardware_exposure
+       milliseconds of physics, regardless of clock drift between
+       the device and the JS event loop.
+     • Event-loop hiccups (slow log rendering, GC pauses) make the
+       function take longer but don't affect the data quality.
+       You always get N samples summed.
+     • No phase-alignment artifacts. Two trials at the same motor
+       settings always see the same total integration time.
+
+   The seed message is included in the count, so n=3 means
+   "sum the next 3 messages including the first fresh one."
+*/
+async function readSumOverPackets(channel, nPackets, timeoutMs = 30000) {
+  if (!WS || WS.readyState !== WebSocket.OPEN) {
+    throw new Error('websocket not connected — click "Connect WebSocket" first');
+  }
+  if (nPackets < 1) throw new Error('nPackets must be >= 1');
+
+  // Wait for one fresh sample (the seed). It counts as packet #1.
+  await readOneSample(channel, timeoutMs);
+  const startT = LATEST[channel].t;
+  let sum = LATEST[channel].val;
+  let n   = 1;
+  let lastSeen = startT;
+
+  const deadlineWall = Date.now() + timeoutMs;
+  while (n < nPackets) {
+    if (ABORT) throw new Error('aborted');
+    if (Date.now() > deadlineWall) {
+      throw new Error(`only got ${n}/${nPackets} packets within ${timeoutMs}ms`);
+    }
+    if (LATEST[channel] && LATEST[channel].t > lastSeen) {
+      sum += LATEST[channel].val;
+      n   += 1;
+      lastSeen = LATEST[channel].t;
+    }
+    await sleep(10);
+  }
+  return { sum, n_messages: n, actual_window_ms: performance.now() - startT };
+}
+
+/* ============================================================
+   Section 0 · ping
+   Reads one count from the configured channel.
+   ============================================================ */
+async function ping() {
+  if (BUSY) return;
+  setBusy(true);
+  logHead('PING');
+  const ch = +document.getElementById('dataChannel').value;
+  try {
+    // Take one sample for the basic count, then a 1-second sum to
+    // measure the actual WS push rate. Useful for confirming the
+    // ~10 Hz update rate the device documentation suggests.
+    const v1 = await readOneSample(ch);
+    log(`channel ${ch} (single sample): ${v1}`, 'ok');
+
+    log('measuring WS update rate over 1 second…', 'dim');
+    const r = await readSumOverWindow(ch, 1000);
+    log(`channel ${ch} (1-sec sum):     ${r.sum}`, 'ok');
+    log(`messages received in window:   ${r.n_messages}`, 'ok');
+    log(`actual elapsed:                ${r.actual_window_ms.toFixed(0)} ms`, 'dim');
+    log(`→ effective update rate:       ${(r.n_messages * 1000 / r.actual_window_ms).toFixed(1)} Hz`, 'dim');
+  } catch (e) {
+    log('error: ' + e.message, 'err');
+  } finally {
+    setBusy(false);
+  }
+}
+
+/* ============================================================
+   Section 1 · calibration sweep
+   ============================================================ */
+let calSteps = [];
+let calCnts  = [];
+let calFit   = null;   // {phi, A, C} when fit has been run
+
+/* ----- inline SVG plot --------------------------------------
+   Renders calSteps vs calCnts as points + connecting line, and
+   overlays the fitted cosine when calFit is set. Drawn into the
+   #calPlot SVG element. Recomputed on each call (cheap; ≤ a few
+   hundred points) so it can update live during the sweep.
+*/
+function drawCalPlot() {
+  const svg = document.getElementById('calPlot');
+  if (!calSteps.length) { svg.style.display = 'none'; return; }
+  svg.style.display = 'block';
+
+  // viewBox: 0 0 360 220
+  const W = 360, H = 220;
+  const PAD_L = 38, PAD_R = 8, PAD_T = 12, PAD_B = 26;
+  const plotW = W - PAD_L - PAD_R;
+  const plotH = H - PAD_T - PAD_B;
+
+  const xMin = Math.min(...calSteps);
+  const xMax = Math.max(...calSteps);
+  // Include fitted cosine in y-range if available (it can dip below data)
+  let ys = calCnts.slice();
+  if (calFit) {
+    for (let x = xMin; x <= xMax; x += (xMax - xMin) / 60) {
+      ys.push(calFit.A * Math.cos((x - calFit.phi) * Math.PI / 90) + calFit.C);
+    }
+  }
+  const yMin = Math.min(...ys);
+  const yMax = Math.max(...ys);
+  const ySpan = (yMax - yMin) || 1;
+  const xSpan = (xMax - xMin) || 1;
+
+  const sx = (x) => PAD_L + ((x - xMin) / xSpan) * plotW;
+  const sy = (y) => PAD_T + plotH - ((y - yMin) / ySpan) * plotH;
+
+  let svgInner = '';
+
+  // Axes
+  svgInner += `<line x1="${PAD_L}" y1="${PAD_T + plotH}" x2="${PAD_L + plotW}" y2="${PAD_T + plotH}" stroke="#2a313d" stroke-width="1"/>`;
+  svgInner += `<line x1="${PAD_L}" y1="${PAD_T}" x2="${PAD_L}" y2="${PAD_T + plotH}" stroke="#2a313d" stroke-width="1"/>`;
+
+  // Y ticks: 4 levels
+  for (let k = 0; k <= 3; k++) {
+    const yVal = yMin + (ySpan * k / 3);
+    const yPx  = sy(yVal);
+    svgInner += `<line x1="${PAD_L - 3}" y1="${yPx}" x2="${PAD_L}" y2="${yPx}" stroke="#6b7585" stroke-width="1"/>`;
+    svgInner += `<text x="${PAD_L - 5}" y="${yPx + 3}" fill="#6b7585" font-size="9" text-anchor="end" font-family="monospace">${yVal.toFixed(0)}</text>`;
+    // gridline
+    svgInner += `<line x1="${PAD_L}" y1="${yPx}" x2="${PAD_L + plotW}" y2="${yPx}" stroke="#2a313d" stroke-width="0.5" stroke-dasharray="2 3"/>`;
+  }
+  // X ticks: ~6 evenly spaced
+  const nXTicks = 6;
+  for (let k = 0; k <= nXTicks; k++) {
+    const xVal = xMin + (xSpan * k / nXTicks);
+    const xPx  = sx(xVal);
+    svgInner += `<line x1="${xPx}" y1="${PAD_T + plotH}" x2="${xPx}" y2="${PAD_T + plotH + 3}" stroke="#6b7585" stroke-width="1"/>`;
+    svgInner += `<text x="${xPx}" y="${PAD_T + plotH + 14}" fill="#6b7585" font-size="9" text-anchor="middle" font-family="monospace">${xVal.toFixed(0)}°</text>`;
+  }
+
+  // Fitted cosine — draw smooth curve under the data
+  if (calFit) {
+    const N = 120;
+    let path = '';
+    for (let k = 0; k <= N; k++) {
+      const x = xMin + (xSpan * k / N);
+      const y = calFit.A * Math.cos((x - calFit.phi) * Math.PI / 90) + calFit.C;
+      path += (k === 0 ? 'M' : 'L') + sx(x).toFixed(2) + ',' + sy(y).toFixed(2) + ' ';
+    }
+    svgInner += `<path d="${path}" fill="none" stroke="#f5b942" stroke-width="1.5" opacity="0.85"/>`;
+    // mark phi (the offset) with a vertical line in the data range
+    let phi = calFit.phi;
+    while (phi < xMin) phi += 180;
+    while (phi > xMax) phi -= 180;
+    if (phi >= xMin && phi <= xMax) {
+      const px = sx(phi);
+      svgInner += `<line x1="${px}" y1="${PAD_T}" x2="${px}" y2="${PAD_T + plotH}" stroke="#f5b942" stroke-width="0.7" stroke-dasharray="3 3" opacity="0.5"/>`;
+      svgInner += `<text x="${px + 3}" y="${PAD_T + 10}" fill="#f5b942" font-size="9" font-family="monospace">φ=${calFit.phi.toFixed(1)}°</text>`;
+    }
+  }
+
+  // Data: connecting polyline + points
+  let poly = '';
+  for (let i = 0; i < calSteps.length; i++) {
+    poly += sx(calSteps[i]).toFixed(2) + ',' + sy(calCnts[i]).toFixed(2) + ' ';
+  }
+  svgInner += `<polyline points="${poly}" fill="none" stroke="#7fdbca" stroke-width="1" opacity="0.55"/>`;
+  for (let i = 0; i < calSteps.length; i++) {
+    svgInner += `<circle cx="${sx(calSteps[i]).toFixed(2)}" cy="${sy(calCnts[i]).toFixed(2)}" r="2.5" fill="#7fdbca"/>`;
+  }
+
+  // Title row: counts on left, angle on right
+  svgInner += `<text x="${PAD_L}" y="${PAD_T - 2}" fill="#6b7585" font-size="9" font-family="monospace">counts</text>`;
+  svgInner += `<text x="${PAD_L + plotW}" y="${H - 4}" fill="#6b7585" font-size="9" font-family="monospace" text-anchor="end">θ (Bob, °)</text>`;
+
+  svg.innerHTML = svgInner;
+}
+
+async function calibrationSweep() {
+  if (BUSY) return;
+  ABORT = false;
+  setBusy(true);
+  logHead('CALIBRATION SWEEP');
+
+  const start = +document.getElementById('calStart').value;
+  const end   = +document.getElementById('calEnd').value;
+  const step  = +document.getElementById('calStep').value;
+  const samples = Math.max(1, +document.getElementById('calSamples').value);
+  const settleMs = Math.max(0, +document.getElementById('settleMs').value);
+  const parkDeg = +document.getElementById('calPark').value;
+  const ch    = +document.getElementById('dataChannel').value;
+  const aIdx  = +document.getElementById('aliceMotor').value;
+  const bIdx  = +document.getElementById('bobMotor').value;
+
+  if (!WS || WS.readyState !== WebSocket.OPEN) {
+    log('websocket not connected — click "Connect WebSocket"', 'err');
+    setBusy(false); return;
+  }
+
+  const steps = linspaceRange(start, end, step);
+  const cnts  = zeros(steps.length);
+  log(`alice motor ${aIdx} → ${parkDeg}°, sweeping bob motor ${bIdx} on channel ${ch}`);
+  log(`${steps.length} points × ${samples} sample(s)`);
+
+  // Clear any prior plot — fit no longer applies to a new sweep.
+  calSteps = []; calCnts = []; calFit = null;
+  drawCalPlot();
+
+  try {
+    await motorSet(aIdx, parkDeg);
+    await motorWaitIdle(aIdx);
+  } catch (e) {
+    log('failed to park alice: ' + e.message, 'err');
+    setBusy(false); return;
+  }
+
+  for (let i = 0; i < steps.length; i++) {
+    if (ABORT) { log('aborted by user', 'warn'); break; }
+    const theta = steps[i];
+    try {
+      await motorSet(bIdx, theta);
+      await motorWaitIdle(bIdx);
+      await sleep(settleMs);
+
+      const buf = [];
+      for (let j = 0; j < samples; j++) {
+        if (ABORT) break;
+        buf.push(await readOneSample(ch));
+      }
+      const m = mean(buf);
+      cnts[i] = m;
+      log(`  θ=${String(theta).padStart(4)}°  cnt=${m.toFixed(2)}  σ²=${variance(buf).toFixed(2)}`);
+      // live plot update — push only the points completed so far
+      calSteps = steps.slice(0, i + 1);
+      calCnts  = cnts.slice(0, i + 1);
+      drawCalPlot();
+    } catch (e) {
+      log(`  θ=${theta}°  error: ${e.message}`, 'err');
+    }
+  }
+
+  calSteps = steps;
+  calCnts  = cnts;
+  drawCalPlot();
+  log('done. data on window.calSteps / window.calCnts.', 'ok');
+  window.calSteps = calSteps;
+  window.calCnts  = calCnts;
+  setBusy(false);
+}
+
+/* ----- least-squares cosine fit
+   Model:  f(θ) = A · cos((θ − φ)·π/90) + C
+   The argument π/90 means cos period in θ is 180°, so φ is only
+   meaningful mod 180°. The optimizer can wander into multiples of
+   180° during descent (no gradient pulls it back), so we wrap the
+   final φ into (-90°, 90°] before returning.
+*/
+function wrapPhi(phi) {
+  let p = phi % 180;
+  if (p > 90)  p -= 180;
+  if (p <= -90) p += 180;
+  return p;
+}
+
+function fitCosineOffset(steps, cnts) {
+  if (steps.length < 3) throw new Error('need ≥3 points to fit');
+  const m0 = mean(cnts);
+  let p = [0, m0, m0]; // [phi, A, C]
+  const resid = (params) => {
+    const [phi, A, C] = params;
+    return steps.map((s, i) => A * Math.cos((s - phi) * Math.PI / 90) + C - cnts[i]);
+  };
+  const sse = (params) => resid(params).reduce((s, r) => s + r * r, 0);
+
+  const eps = 1e-4;
+  let lr = 0.01;
+  for (let iter = 0; iter < 2000; iter++) {
+    const f0 = sse(p);
+    const grad = p.map((_, k) => {
+      const pp = p.slice(); pp[k] += eps;
+      return (sse(pp) - f0) / eps;
+    });
+    const gnorm = Math.sqrt(grad.reduce((s, g) => s + g * g, 0));
+    if (gnorm < 1e-8) break;
+    let step = lr, trial, fnew;
+    for (let k = 0; k < 30; k++) {
+      trial = p.map((v, i) => v - step * grad[i]);
+      fnew = sse(trial);
+      if (fnew < f0) break;
+      step *= 0.5;
+    }
+    if (fnew >= f0) break;
+    p = trial;
+    lr = Math.min(lr * 1.1, 1);
+  }
+  // A < 0 is equivalent to A > 0 with phi shifted by 90°; canonicalize
+  // so the fitted amplitude is reported as a positive number.
+  if (p[1] < 0) {
+    p[1] = -p[1];
+    p[0] = p[0] + 90;
+  }
+  return { phi: wrapPhi(p[0]), A: p[1], C: p[2] };
+}
+
+function fitOffset() {
+  logHead('COSINE FIT');
+  if (!calSteps.length) { log('no calibration data — run sweep first', 'err'); return; }
+  try {
+    const fit = fitCosineOffset(calSteps, calCnts);
+    const parkDeg = +document.getElementById('calPark').value;
+
+    // The fit's phi locates the peak of the cosine in Bob's commanded
+    // angle space. Physics: peak occurs when Bob's polarizer matches
+    // Alice's parked polarizer. So
+    //     phi_fit ≈ park_alice + bob_offset
+    // and the true reference-frame offset between the two analyzers is
+    //     bob_offset = phi_fit - park_alice
+    // wrapped into a canonical range. Without subtracting park, the
+    // value is wrong whenever park != 0.
+    let bobOffset = fit.phi - parkDeg;
+    bobOffset = wrapPhi(bobOffset);
+
+    log(`raw fit phi       = ${fit.phi.toFixed(4)}°`);
+    log(`park angle        = ${parkDeg}°`);
+    log(`bob_offset (phi-park) = ${bobOffset.toFixed(4)}°`, 'ok');
+    log(`amplitude   (A)   = ${fit.A.toFixed(2)}`);
+    log(`baseline    (C)   = ${fit.C.toFixed(2)}`);
+    log(`visibility  A/C   = ${(fit.A / fit.C).toFixed(4)}`);
+    document.getElementById('bobOffset').value = bobOffset.toFixed(2);
+    log('→ wrote into Bob offset field', 'ok');
+    window.bobOffsetFit = bobOffset;
+    calFit = fit;       // store for the plot
+    drawCalPlot();      // overlay the cosine
+  } catch (e) {
+    log('fit failed: ' + e.message, 'err');
+  }
+}
+
+/* ----- calibration CSV export -------------------------------
+   Writes a single CSV with the sweep data and (if available)
+   the fit parameters as comment lines at the top, so the file
+   is self-describing for reuse / sharing with the team.
+*/
+function saveCalibration() {
+  logHead('SAVE CALIBRATION CSV');
+  if (!calSteps.length) { log('no calibration data — run sweep first', 'err'); return; }
+
+  const ch      = document.getElementById('dataChannel').value;
+  const aIdx    = document.getElementById('aliceMotor').value;
+  const bIdx    = document.getElementById('bobMotor').value;
+  const samples = document.getElementById('calSamples').value;
+  const parkDeg = document.getElementById('calPark').value;
+
+  const lines = [];
+  lines.push(`# quED E91 calibration sweep`);
+  lines.push(`# timestamp_iso=${new Date().toISOString()}`);
+  lines.push(`# alice_motor=${aIdx}  bob_motor=${bIdx}  channel=${ch}  samples_per_point=${samples}`);
+  lines.push(`# alice_park_deg=${parkDeg}`);
+  if (calFit) {
+    lines.push(`# fit_model=A*cos((theta-phi)*pi/90)+C`);
+    lines.push(`# fit_phi_deg=${calFit.phi.toFixed(6)}`);
+    lines.push(`# fit_amplitude=${calFit.A.toFixed(6)}`);
+    lines.push(`# fit_baseline=${calFit.C.toFixed(6)}`);
+  } else {
+    lines.push(`# fit=none  (run "Fit cosine" before saving for full record)`);
+  }
+  lines.push(`angle_deg,counts`);
+  for (let i = 0; i < calSteps.length; i++) {
+    lines.push(`${calSteps[i]},${calCnts[i]}`);
+  }
+  const body = lines.join('\n') + '\n';
+
+  const stamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
+  // Include park angle in filename so multiple sweeps don't overwrite each other
+  const parkTag = `park${parkDeg}`.replace(/[^A-Za-z0-9_]/g, '');
+  const name  = `calibration_${parkTag}_${stamp}.csv`;
+  const blob  = new Blob([body], { type: 'text/csv' });
+  const url   = URL.createObjectURL(blob);
+  const a     = document.createElement('a');
+  a.href = url; a.download = name;
+  document.body.appendChild(a); a.click(); a.remove();
+  URL.revokeObjectURL(url);
+  log(`  ↓ ${name}  (${calSteps.length} rows${calFit ? ', incl. fit params' : ''})`, 'ok');
+}
+
+/* ============================================================
+   Section 2 · generate random bases & bits
+   ============================================================ */
+let basis_Alice = [], basis_Bob = [];
+let bits_Alice  = [], bits_Bob  = [];
+let angles_Alice = [], angles_Bob = [];
+
+function generateBases() {
+  const N = +document.getElementById('length').value;
+  const offsetBob = +document.getElementById('bobOffset').value;
+
+  basis_Alice = zeros(N); basis_Bob = zeros(N);
+  bits_Alice  = zeros(N); bits_Bob  = zeros(N);
+  angles_Alice = zeros(N); angles_Bob = zeros(N);
+
+  for (let x = 0; x < N; x++) {
+    basis_Alice[x] = randInt(0, 2);
+    basis_Bob[x]   = randInt(0, 2);
+    bits_Alice[x]  = randInt(0, 1);
+    bits_Bob[x]    = randInt(0, 1);
+    angles_Alice[x] = (120 * basis_Alice[x] + 90 * bits_Alice[x]) % 180;
+    angles_Bob[x]   = (120 * basis_Bob[x]   + 90 * bits_Bob[x]  ) % 180;
+  }
+  // Apply Bob's calibration offset, then wrap into [0, 180) to keep
+  // motor moves short. Polarizers are 180°-symmetric, so this is
+  // physics-equivalent to leaving the angles unwrapped — but the
+  // motor travels less, so trials run faster.
+  angles_Bob = angles_Bob.map(a => {
+    let adj = (a + offsetBob) % 180;
+    return adj < 0 ? adj + 180 : adj;
+  });
+
+  logHead(`GENERATE  N=${N}  bobOffset=${offsetBob}°`);
+  const preview = (arr, n = 20) => arr.slice(0, n).map(v => v.toFixed ? v.toFixed(0) : v).join(',');
+  log('Alice basis  : [' + preview(basis_Alice) + (basis_Alice.length > 20 ? ',…' : '') + ']');
+  log('Alice bits   : [' + preview(bits_Alice)  + (bits_Alice.length  > 20 ? ',…' : '') + ']');
+  log('Alice angles : [' + preview(angles_Alice)+ (angles_Alice.length> 20 ? ',…' : '') + ']');
+  log('Bob basis    : [' + preview(basis_Bob)   + (basis_Bob.length   > 20 ? ',…' : '') + ']');
+  log('Bob bits     : [' + preview(bits_Bob)    + (bits_Bob.length    > 20 ? ',…' : '') + ']');
+  log('Bob angles   : [' + preview(angles_Bob)  + (angles_Bob.length  > 20 ? ',…' : '') + ']');
+  log('arrays exposed on window.{basis_Alice, bits_Alice, angles_Alice, ...}', 'dim');
+  Object.assign(window, { basis_Alice, basis_Bob, bits_Alice, bits_Bob, angles_Alice, angles_Bob });
+}
+
+/* ============================================================
+   Section 3 · QKD experiment
+   ============================================================ */
+let detector = [];
+
+async function runExperiment() {
+  if (BUSY) return;
+  if (!angles_Alice.length) { log('no angles — generate bases first', 'err'); return; }
+  if (!WS || WS.readyState !== WebSocket.OPEN) {
+    log('websocket not connected — click "Connect WebSocket"', 'err'); return;
+  }
+  ABORT = false;
+  setBusy(true);
+  logHead(`QKD EXPERIMENT  ${angles_Alice.length} pairs`);
+
+  const numTrials = Math.max(1, +document.getElementById('numTrials').value);
+  const settleMs  = Math.max(0, +document.getElementById('settleMs').value);
+  const useIntegration = document.getElementById('useIntegration').checked;
+  const packetsPerTrial = useIntegration ? Math.max(1, +document.getElementById('packetsPerTrial').value) : 1;
+  const ch        = +document.getElementById('dataChannel').value;
+  const aIdx      = +document.getElementById('aliceMotor').value;
+  const bIdx      = +document.getElementById('bobMotor').value;
+  detector = [];
+  const t0 = performance.now();
+
+  if (packetsPerTrial > 1) {
+    log(`integrating each trial over ${packetsPerTrial} packets (sum)`, 'dim');
+  } else {
+    log('single-packet mode: one WS message per trial', 'dim');
+  }
+
+  const optReorder = document.getElementById('optReorder').checked;
+  const optGroup   = document.getElementById('optGroup').checked;
+
+  // Pre-allocate detector — results write to original index regardless of execution order.
+  detector = new Array(angles_Alice.length).fill(0);
+  const N = angles_Alice.length;
+
+  /* ----- Build execution plan ------------------------------------------
+     A "plan" is an array of *stops*; each stop is a single (α, β) motor
+     setting plus a list of trial indices to measure at that setting.
+     Without grouping, every trial is its own stop. With grouping, all
+     trials sharing the same (α, β) pair share one stop.
+     Without reordering, stops execute in original index order. With
+     reordering, stops are ordered nearest-neighbor in motor space.
+  */
+  const angDist = (a, b) => {
+    let d = Math.abs(a - b) % 180;
+    if (d > 90) d = 180 - d;
+    return d;
+  };
+
+  // Stage 1: group (or not)
+  let stops; // each stop: { alpha, beta, indices: [trial idx, ...] }
+  if (optGroup) {
+    const map = new Map();   // key "α|β" → indices array
+    for (let i = 0; i < N; i++) {
+      const key = `${angles_Alice[i]}|${angles_Bob[i]}`;
+      if (!map.has(key)) map.set(key, { alpha: angles_Alice[i], beta: angles_Bob[i], indices: [] });
+      map.get(key).indices.push(i);
+    }
+    stops = Array.from(map.values());
+  } else {
+    stops = [];
+    for (let i = 0; i < N; i++) {
+      stops.push({ alpha: angles_Alice[i], beta: angles_Bob[i], indices: [i] });
+    }
+  }
+
+  // Stage 2: reorder (or not) — nearest-neighbor on stop positions
+  let curA = _motorPosSteps[aIdx] * 360 / STEPS_PER_REV;
+  let curB = _motorPosSteps[bIdx] * 360 / STEPS_PER_REV;
+  if (optReorder) {
+    const remaining = stops.slice();
+    const ordered = [];
+    let pA = curA, pB = curB;
+    while (remaining.length) {
+      let bestK = 0, bestD = Infinity;
+      for (let k = 0; k < remaining.length; k++) {
+        const d = angDist(remaining[k].alpha, pA) + angDist(remaining[k].beta, pB);
+        if (d < bestD) { bestD = d; bestK = k; }
+      }
+      const next = remaining.splice(bestK, 1)[0];
+      ordered.push(next);
+      pA = next.alpha; pB = next.beta;
+    }
+    stops = ordered;
+  }
+
+  // Total travel diagnostic
+  const travelOf = (plan) => {
+    let totA = 0, totB = 0;
+    let pA = curA, pB = curB;
+    for (const s of plan) {
+      totA += angDist(s.alpha, pA);
+      totB += angDist(s.beta, pB);
+      pA = s.alpha; pB = s.beta;
+    }
+    return Math.max(totA, totB);
+  };
+  const naiveStops = [];
+  for (let i = 0; i < N; i++) naiveStops.push({ alpha: angles_Alice[i], beta: angles_Bob[i] });
+  const naiveTravel = travelOf(naiveStops);
+  const planTravel  = travelOf(stops);
+  const totalReads  = stops.reduce((s, x) => s + x.indices.length, 0);
+
+  log('── execution plan ──', 'ok');
+  log(`  trials                 : ${N}`);
+  log(`  stops (motor positions): ${stops.length}  ${optGroup ? '(grouped)' : '(no grouping)'}`);
+  log(`  reads at each stop avg : ${(totalReads / stops.length).toFixed(2)}`);
+  log(`  reordering             : ${optReorder ? 'enabled (nearest-neighbor)' : 'disabled'}`);
+  log(`  motor travel naive     : ${naiveTravel.toFixed(0)}°`);
+  log(`  motor travel planned   : ${planTravel.toFixed(0)}°  (${(100 * (1 - planTravel / naiveTravel)).toFixed(0)}% reduction)`, 'ok');
+  log(`  motor moves            : ${stops.length}  vs naive ${N}  (${(100 * (1 - stops.length / N)).toFixed(0)}% reduction)`, 'ok');
+
+  /* ----- Execute the plan -------------------------------------------- */
+  let totalReadsDone = 0;
+  for (let s = 0; s < stops.length; s++) {
+    if (ABORT) { log('aborted', 'warn'); break; }
+    const stop = stops[s];
+
+    try {
+      await motorSetMany([{ idx: aIdx, deg: stop.alpha }, { idx: bIdx, deg: stop.beta }]);
+      await sleep(settleMs);
+
+      // Take measurement(s) at this position; one for each trial in the group.
+      // Within a group, each trial gets `numTrials` samples averaged, so a
+      // group of K trials does K * numTrials reads at this motor position.
+      for (const i of stop.indices) {
+        if (ABORT) break;
+        const buf = [];
+        let lastNMsg = 0;
+        for (let t = 0; t < numTrials; t++) {
+          if (ABORT) break;
+          if (packetsPerTrial > 1) {
+            const r = await readSumOverPackets(ch, packetsPerTrial);
+            buf.push(r.sum);
+            lastNMsg = r.n_messages;
+          } else {
+            buf.push(await readOneSample(ch));
+          }
+        }
+        const m = mean(buf);
+        detector[i] = m;
+        totalReadsDone++;
+
+        const dt = ((performance.now() - t0) / 1000).toFixed(1);
+        const extra = packetsPerTrial > 1 ? ` (${lastNMsg} pkts)` : '';
+        log(`  [${totalReadsDone}/${N}] stop ${s + 1}/${stops.length} (trial #${i + 1})  ` +
+            `α=${stop.alpha.toFixed(0)}° β=${stop.beta.toFixed(0)}°  cnt=${m.toFixed(2)}${extra}  (${dt}s)`);
+      }
+    } catch (e) {
+      log(`  stop ${s + 1} error: ${e.message}`, 'err');
+      for (const i of stop.indices) detector[i] = 0;
+    }
+  }
+  window.detector = detector;
+  log('done. detector array on window.detector.', 'ok');
+  setBusy(false);
+}
+
+function abort() {
+  if (!BUSY) return;
+  ABORT = true;
+  log('abort requested — will stop after current step', 'warn');
+}
+
+/* ============================================================
+   Section 4 · CSV save / load
+   ============================================================ */
+function downloadCsv(name, arr) {
+  const body = arr.map(v => (Number.isInteger(v) ? v : Math.round(v))).join('\n') + '\n';
+  const blob = new Blob([body], { type: 'text/csv' });
+  const url  = URL.createObjectURL(blob);
+  const a    = document.createElement('a');
+  a.href = url; a.download = name;
+  document.body.appendChild(a); a.click(); a.remove();
+  URL.revokeObjectURL(url);
+}
+function saveCsv() {
+  logHead('SAVE CSV');
+  if (!detector.length && !angles_Alice.length) { log('nothing to save', 'err'); return; }
+  const files = [
+    ['output_Alice.csv', detector],
+    ['alice_Bases.csv',  basis_Alice],
+    ['bob_Bases.csv',    basis_Bob],
+    ['alice_Bits.csv',   bits_Alice],
+    ['bob_Bits.csv',     bits_Bob],
+    ['alice_Angles.csv', angles_Alice],
+    ['bob_Angles.csv',   angles_Bob],
+  ];
+  for (const [name, arr] of files) {
+    if (arr.length) { downloadCsv(name, arr); log('  ↓ ' + name + '  (' + arr.length + ' rows)'); }
+  }
+  log('downloads triggered', 'ok');
+}
+
+function loadCsv() { document.getElementById('loadInput').click(); }
+async function handleLoad(e) {
+  logHead('LOAD CSV');
+  const fileMap = {
+    'output_alice':  v => detector = v,
+    'alice_bases':   v => basis_Alice = v,
+    'bob_bases':     v => basis_Bob = v,
+    'alice_bits':    v => bits_Alice = v,
+    'bob_bits':      v => bits_Bob = v,
+    'alice_angles':  v => angles_Alice = v,
+    'bob_angles':    v => angles_Bob = v,
+  };
+  for (const f of e.target.files) {
+    const text = await f.text();
+    const arr = text.trim().split(/\r?\n/).map(s => Number(s.trim())).filter(v => Number.isFinite(v));
+    const key = f.name.toLowerCase().replace(/\.csv$/, '');
+    if (fileMap[key]) { fileMap[key](arr); log(`  ↑ ${f.name}  (${arr.length} rows)`); }
+    else log(`  ? ${f.name} — unknown name, skipped`, 'warn');
+  }
+  Object.assign(window, { detector, basis_Alice, basis_Bob, bits_Alice, bits_Bob, angles_Alice, angles_Bob });
+  log('loaded.', 'ok');
+  e.target.value = '';
+}
+
+/* ============================================================
+   Section 5 · sift + analyze
+   ============================================================ */
+function flatnonzero(pred, arr) {
+  const out = [];
+  for (let i = 0; i < arr.length; i++) if (pred(arr[i], i)) out.push(i);
+  return out;
+}
+function intersect(a, b) { const sb = new Set(b); return a.filter(x => sb.has(x)); }
+function diff(a, b)      { const sb = new Set(b); return a.filter(x => !sb.has(x)); }
+function binaryEntropy(p) {
+  if (p <= 0 || p >= 1) return 0;
+  return -p * Math.log2(p) - (1 - p) * Math.log2(1 - p);
+}
+
+/* ----- per-bucket coincidence counts ------------------------
+   For each (basis_a, basis_b, bit_a, bit_b) combination, sum
+   the coincidence count rates across all matching trials and
+   report:
+     n      = number of trials in that bucket
+     sum    = summed coincidence count rate
+     mean   = average rate per trial in the bucket
+   This is the raw input to rate-based correlation analysis.
+   Output as a CSV-friendly table both in the log AND on
+   window.bucketTable for programmatic access.
+*/
+function showBuckets() {
+  logHead('PER-BUCKET COINCIDENCE COUNTS');
+  if (!detector.length || !basis_Alice.length) {
+    log('need detector + basis arrays — run experiment or load CSVs first', 'err'); return;
+  }
+  const N = detector.length;
+
+  // 3 bases × 3 bases × 2 bits × 2 bits = 36 buckets
+  // key: `${ba}_${bb}_${bita}_${bitb}` → {n, sum}
+  const buckets = {};
+  const key = (ba, bb, ia, ib) => `${ba}_${bb}_${ia}_${ib}`;
+  for (let ba = 0; ba <= 2; ba++)
+    for (let bb = 0; bb <= 2; bb++)
+      for (let ia = 0; ia <= 1; ia++)
+        for (let ib = 0; ib <= 1; ib++)
+          buckets[key(ba, bb, ia, ib)] = { n: 0, sum: 0 };
+
+  for (let i = 0; i < N; i++) {
+    const k = key(basis_Alice[i], basis_Bob[i], bits_Alice[i], bits_Bob[i]);
+    if (buckets[k]) {
+      buckets[k].n   += 1;
+      buckets[k].sum += detector[i];
+    }
+  }
+
+  // Header
+  log('basis_A  basis_B  bit_A  bit_B  | n_trials   sum_counts   mean_rate', 'ok');
+  log('───────  ───────  ─────  ─────  | ────────   ──────────   ─────────', 'dim');
+
+  const rows = [];
+  for (let ba = 0; ba <= 2; ba++) {
+    for (let bb = 0; bb <= 2; bb++) {
+      for (let ia = 0; ia <= 1; ia++) {
+        for (let ib = 0; ib <= 1; ib++) {
+          const b = buckets[key(ba, bb, ia, ib)];
+          const m = b.n > 0 ? b.sum / b.n : 0;
+          const sameBasis = (ba === bb);
+          const cls = sameBasis ? 'info' : 'dim';
+          log(
+            `   ${ba}        ${bb}       ${ia}      ${ib}    | ` +
+            `${String(b.n).padStart(7)}   ` +
+            `${b.sum.toFixed(0).padStart(10)}   ` +
+            `${m.toFixed(2).padStart(9)}`,
+            cls
+          );
+          rows.push({ basis_A: ba, basis_B: bb, bit_A: ia, bit_B: ib,
+                      n_trials: b.n, sum_counts: b.sum, mean_rate: m,
+                      same_basis: sameBasis });
+        }
+      }
+      // blank line between basis-pair groups for readability
+      if (bb < 2 || ba < 2) log('', 'dim');
+    }
+  }
+
+  // Quick interpretation: correlation E for each basis pair
+  log('', 'info');
+  log('── correlation E(a,b) per basis pair ──', 'ok');
+  log('  E = (N(0,0) + N(1,1) - N(0,1) - N(1,0)) / (sum of all four)', 'dim');
+  log('  matches-basis pairs (a==b) should yield E ≈ +1 for an intact Bell state', 'dim');
+  log('', 'dim');
+  log('basis_A  basis_B  | N(0,0)   N(1,1)   N(0,1)   N(1,0)  |  E(a,b)', 'ok');
+  log('───────  ───────  | ──────   ──────   ──────   ──────  |  ──────', 'dim');
+  const correlations = {};
+  for (let ba = 0; ba <= 2; ba++) {
+    for (let bb = 0; bb <= 2; bb++) {
+      const n00 = buckets[key(ba, bb, 0, 0)].sum;
+      const n11 = buckets[key(ba, bb, 1, 1)].sum;
+      const n01 = buckets[key(ba, bb, 0, 1)].sum;
+      const n10 = buckets[key(ba, bb, 1, 0)].sum;
+      const tot = n00 + n11 + n01 + n10;
+      const E   = tot > 0 ? (n00 + n11 - n01 - n10) / tot : 0;
+      correlations[`${ba}_${bb}`] = E;
+      const cls = (ba === bb) ? 'ok' : 'info';
+      log(
+        `   ${ba}        ${bb}     | ` +
+        `${n00.toFixed(0).padStart(6)}   ` +
+        `${n11.toFixed(0).padStart(6)}   ` +
+        `${n01.toFixed(0).padStart(6)}   ` +
+        `${n10.toFixed(0).padStart(6)}  | ` +
+        `${E.toFixed(4).padStart(7)}`,
+        cls
+      );
+    }
+  }
+
+  // Expose for downstream use
+  window.bucketTable  = rows;
+  window.correlations = correlations;
+  log('', 'dim');
+  log('exported: window.bucketTable (36 rows), window.correlations (9 E values)', 'dim');
+}
+
+function sift() {
+  logHead('SIFT + ANALYZE');
+  if (!detector.length || !basis_Alice.length) {
+    log('need detector + basis arrays — run experiment or load CSVs first', 'err'); return;
+  }
+  const N = basis_Alice.length;
+  const detThresh = +document.getElementById('detThresh').value;
+
+  const indices_bases   = flatnonzero((_, i) => isclose(basis_Alice[i], basis_Bob[i]), basis_Alice);
+  // For CW data, `detector` contains coincidence count *rates* per trial,
+  // not 0/1 flags. Treat any trial whose rate exceeds the threshold as
+  // "measured." Use `>=` rather than `isclose` (which compares for exact
+  // equality and almost never matches a noisy count).
+  const measured_indices = flatnonzero(v => v >= detThresh, detector);
+  const good_indices = intersect(indices_bases, measured_indices);
+  const bad_indices  = diff(measured_indices, good_indices);
+
+  log(`pairs            : ${N}`);
+  log(`measured (≈${detThresh}): ${measured_indices.length}`);
+  log(`same-basis       : ${indices_bases.length}`);
+  log(`good (sift)      : ${good_indices.length}`);
+  log(`bad (diff-basis) : ${bad_indices.length}`);
+
+  const n_good  = good_indices.length;
+  const errors  = good_indices.reduce((s, i) => s + (bits_Alice[i] !== bits_Bob[i] ? 1 : 0), 0);
+  const QBER    = n_good > 0 ? errors / n_good : 0;
+
+  const n_measured    = measured_indices.length;
+  const sift_fraction = n_measured > 0 ? n_good / n_measured : 0;
+  const raw_SKR       = sift_fraction * Math.max(0, 1 - 2 * binaryEntropy(QBER));
+  const SKR           = raw_SKR * (n_measured / N);
+
+  const EVE_THRESHOLD = 0.3125;
+  const n_bad     = bad_indices.length;
+  const agree_bad = bad_indices.reduce((s, i) => s + (bits_Alice[i] === bits_Bob[i] ? 1 : 0), 0);
+  const agreement_rate = n_bad > 0 ? agree_bad / n_bad : 0;
+  const eve_detected   = agreement_rate > EVE_THRESHOLD;
+
+  log('');
+  log('══════════ E91 RESULTS ══════════', 'ok');
+  log(`pairs emitted       : ${N}`);
+  log(`detected (both)     : ${n_measured}  (${(n_measured / N * 100).toFixed(1)}%)`);
+  log(`sifted bits         : ${n_good}  (${(sift_fraction * 100).toFixed(1)}% of detected)`);
+  log(`bad-index pairs     : ${n_bad}`);
+  log('');
+  log('── QBER ──');
+  log(`errors              : ${errors}`);
+  log(`QBER                : ${QBER.toFixed(4)}  (${(QBER * 100).toFixed(2)}%)`);
+  if (QBER < 0.05)      log('status              : SECURE', 'ok');
+  else if (QBER < 0.11) log('status              : MARGINAL — consider aborting', 'warn');
+  else                  log('status              : ABORT — QBER too high', 'err');
+  log('');
+  log('── Secure key rate (Devetak-Winter) ──');
+  log(`sift fraction       : ${sift_fraction.toFixed(4)}`);
+  log(`raw SKR (per det.)  : ${raw_SKR.toFixed(4)}`);
+  log(`SKR (per emitted)   : ${SKR.toFixed(4)}`);
+  log(`secure bits         : ${Math.floor(SKR * N)}`);
+  log('');
+  log('── Eavesdropping check ──');
+  log(`agreement rate      : ${agreement_rate.toFixed(4)}  (${(agreement_rate * 100).toFixed(2)}%)`);
+  log('expected (no Eve)   : 0.2500');
+  log('expected (Eve)      : 0.3750');
+  log(`threshold           : ${EVE_THRESHOLD.toFixed(4)}`);
+  if (eve_detected) log('Eve detected        : YES — ABORT', 'err');
+  else              log('Eve detected        : NO — channel secure', 'ok');
+  log('═══════════════════════════════════', 'ok');
+
+  window.results = { QBER, SKR, raw_SKR, sift_fraction, n_good, n_measured, n_bad,
+                     errors, agreement_rate, eve_detected, good_indices, bad_indices };
+}
+
+/* ============================================================
+   Modified E91 — probabilistic ("biased coin") sift
+   --------------------------------------------------------------
+   Per the protocol modification:
+     For each trial i with measured coincidence count n_i,
+     Alice computes p_i = (n_i - n_min) / n_max, clamps to [0,1],
+     and flips a coin with that bias. Heads → trial counts as a
+     "logical coincidence" and the bit is appended to the raw key.
+     Tails → discard.
+
+   This replaces the hard threshold (`n_i ≈ 1`) with a soft
+   probabilistic acceptance whose expected acceptance rate scales
+   with the measured count rate — so high-coincidence trials
+   almost always count, low-coincidence trials almost never.
+
+   n_min and n_max default to the calibration cosine fit's C
+   (baseline) and A+C (peak). Override fields let you set them
+   manually. "Repeat coin flips" runs the coin-flip K times and
+   accepts if any flip is heads — this is equivalent to using
+   acceptance probability 1-(1-p)^K and is a knob to dial up the
+   sift fraction at the cost of accepting more low-count trials.
+   ============================================================ */
+function useFitForBounds() {
+  if (!calFit) {
+    log('no calibration fit — run sweep + fit first', 'err'); return;
+  }
+  // n_min = trough (counts at 90° relative angle) = C - A
+  // n_max = peak (counts at aligned polarizers)    = C + A
+  const nMin = calFit.C - calFit.A;
+  const nMax = calFit.C + calFit.A;
+  document.getElementById('nMinOverride').value = nMin.toFixed(2);
+  document.getElementById('nMaxOverride').value = nMax.toFixed(2);
+  log(`using cal fit bounds: n_min = ${nMin.toFixed(2)} (trough C−A), n_max = ${nMax.toFixed(2)} (peak A+C)`, 'ok');
+}
+
+function modifiedSift() {
+  logHead('MODIFIED E91 — PROBABILISTIC SIFT');
+  if (!detector.length || !basis_Alice.length) {
+    log('need detector + basis arrays — run experiment or load CSVs first', 'err'); return;
+  }
+
+  const N = basis_Alice.length;
+
+  // ===== Stage 0: input data summary =====
+  log('── INPUTS ──', 'ok');
+  log(`N (trials)            : ${N}`);
+  if (detector.length !== basis_Alice.length) {
+    log(`WARNING: detector len ${detector.length} != basis len ${basis_Alice.length}`, 'warn');
+  }
+
+  // detector array stats
+  const detSorted = detector.slice().sort((a, b) => a - b);
+  const detMin = detSorted[0];
+  const detMax = detSorted[detSorted.length - 1];
+  const detMean = detector.reduce((s, v) => s + v, 0) / N;
+  const detMed = detSorted[Math.floor(N / 2)];
+  const detP10 = detSorted[Math.floor(N * 0.10)];
+  const detP90 = detSorted[Math.floor(N * 0.90)];
+  const detVar = detector.reduce((s, v) => s + (v - detMean) ** 2, 0) / N;
+  log(`detector counts       : min=${detMin}, p10=${detP10}, median=${detMed}, mean=${detMean.toFixed(2)}, p90=${detP90}, max=${detMax}`);
+  log(`detector variance     : ${detVar.toFixed(2)}  (Poisson would give variance ≈ mean)`);
+
+  // basis/bit balance — should be roughly uniform if RNG is healthy
+  const basisCountA = [0, 0, 0], basisCountB = [0, 0, 0];
+  const bitCountA = [0, 0], bitCountB = [0, 0];
+  for (let i = 0; i < N; i++) {
+    basisCountA[basis_Alice[i]]++;
+    basisCountB[basis_Bob[i]]++;
+    bitCountA[bits_Alice[i]]++;
+    bitCountB[bits_Bob[i]]++;
+  }
+  log(`Alice basis dist      : [${basisCountA.join(', ')}]  (expect ~${(N/3).toFixed(0)} each)`);
+  log(`Bob basis dist        : [${basisCountB.join(', ')}]  (expect ~${(N/3).toFixed(0)} each)`);
+  log(`Alice bit dist        : [${bitCountA.join(', ')}]  (expect ~${(N/2).toFixed(0)} each)`);
+  log(`Bob bit dist          : [${bitCountB.join(', ')}]  (expect ~${(N/2).toFixed(0)} each)`);
+
+  // ===== Stage 1: bounds resolution =====
+  log('', 'dim');
+  log('── BOUNDS ──', 'ok');
+  let nMin = parseFloat(document.getElementById('nMinOverride').value);
+  let nMax = parseFloat(document.getElementById('nMaxOverride').value);
+  let boundsSource;
+  if (!Number.isFinite(nMin) || !Number.isFinite(nMax)) {
+    if (!calFit) {
+      log('no n_min/n_max overrides AND no calibration fit available', 'err');
+      log('either run a calibration sweep + fit, or fill the override fields', 'err');
+      return;
+    }
+    nMin = calFit.C - calFit.A;
+    nMax = calFit.C + calFit.A;
+    boundsSource = 'calibration fit';
+    log(`source                : ${boundsSource}`);
+    log(`  cal fit A           : ${calFit.A.toFixed(4)}`);
+    log(`  cal fit C           : ${calFit.C.toFixed(4)}`);
+    log(`  cal fit phi         : ${calFit.phi.toFixed(4)}°`);
+    log(`  visibility A/C      : ${(calFit.A / calFit.C).toFixed(4)}  (>0.9 ideal, >0.7 acceptable)`);
+  } else {
+    boundsSource = 'manual override';
+    log(`source                : ${boundsSource}`);
+  }
+  log(`n_min                 : ${nMin.toFixed(4)}  (trough, expected at 90° relative angle)`);
+  log(`n_max                 : ${nMax.toFixed(4)}  (peak, expected at aligned polarizers)`);
+  log(`span (n_max - n_min)  : ${(nMax - nMin).toFixed(4)}`);
+
+  if (nMax <= nMin) {
+    log(`n_max (${nMax}) must be greater than n_min (${nMin})`, 'err'); return;
+  }
+
+  // Sanity check: how do bounds compare to actual data?
+  const belowMin = detector.filter(v => v < nMin).length;
+  const aboveMax = detector.filter(v => v > nMax).length;
+  const inRange  = N - belowMin - aboveMax;
+  log(`trials below n_min    : ${belowMin}  (${(belowMin/N*100).toFixed(1)}%, will get p=0)`);
+  log(`trials in [n_min,n_max]: ${inRange}  (${(inRange/N*100).toFixed(1)}%)`);
+  log(`trials above n_max    : ${aboveMax}  (${(aboveMax/N*100).toFixed(1)}%, will get p=1 after clamp)`);
+
+  const reps = Math.max(1, +document.getElementById('coinReps').value);
+  const span = nMax - nMin;
+
+  // ===== Stage 2: per-trial coin flips =====
+  log('', 'dim');
+  log('── COIN FLIPS ──', 'ok');
+  const accepted = [];
+  const probs    = [];
+  let clampedLow = 0, clampedHigh = 0;
+  for (let i = 0; i < N; i++) {
+    let p_raw = (detector[i] - nMin) / span;
+    let p = p_raw;
+    if (p < 0) { p = 0; clampedLow++; }
+    if (p > 1) { p = 1; clampedHigh++; }
+    probs.push(p);
+    let heads = false;
+    for (let r = 0; r < reps; r++) {
+      if (Math.random() < p) { heads = true; break; }
+    }
+    if (heads) accepted.push(i);
+  }
+  const meanP = probs.reduce((s, p) => s + p, 0) / N;
+  log(`coin reps             : ${reps}  (effective accept p ≈ 1-(1-p)^${reps})`);
+  log(`p_i clamped to 0      : ${clampedLow}  (counts ≤ n_min)`);
+  log(`p_i clamped to 1      : ${clampedHigh}  (counts ≥ n_max)`);
+  log(`mean p_i              : ${meanP.toFixed(4)}`);
+  log(`expected accept rate  : ${(reps === 1 ? meanP : (1 - probs.reduce((s,p) => s + Math.pow(1-p, reps), 0) / N)).toFixed(4)}`);
+  log(`actual accept rate    : ${(accepted.length / N).toFixed(4)}`);
+  log(`logical coincidences  : ${accepted.length}  (${(accepted.length / N * 100).toFixed(1)}% of trials)`);
+
+  // ===== Stage 3: sifting =====
+  log('', 'dim');
+  log('── SIFTING ──', 'ok');
+  const same_basis = accepted.filter(i => basis_Alice[i] === basis_Bob[i]);
+  const diff_basis = accepted.filter(i => basis_Alice[i] !== basis_Bob[i]);
+  log(`accepted              : ${accepted.length}`);
+  log(`  same-basis (sifted) : ${same_basis.length}  (${accepted.length > 0 ? (same_basis.length/accepted.length*100).toFixed(1) : 0}% of accepted)`);
+  log(`  diff-basis          : ${diff_basis.length}  (${accepted.length > 0 ? (diff_basis.length/accepted.length*100).toFixed(1) : 0}% of accepted)`);
+  log(`expected same-basis   : ~33% (3 bases, uniform random)`);
+
+  // Sifted bits broken down by basis
+  const siftedByBasis = [0, 0, 0];
+  const errorsByBasis = [0, 0, 0];
+  for (const i of same_basis) {
+    const b = basis_Alice[i];
+    siftedByBasis[b]++;
+    if (bits_Alice[i] !== bits_Bob[i]) errorsByBasis[b]++;
+  }
+  log(`sifted by basis       : [${siftedByBasis.join(', ')}]`);
+  log(`errors by basis       : [${errorsByBasis.join(', ')}]`);
+  for (let b = 0; b < 3; b++) {
+    if (siftedByBasis[b] > 0) {
+      const q = errorsByBasis[b] / siftedByBasis[b];
+      log(`  basis ${b} QBER        : ${q.toFixed(4)}  (${(q*100).toFixed(2)}%)`);
+    } else {
+      log(`  basis ${b} QBER        : N/A (no sifted bits)`, 'dim');
+    }
+  }
+
+  // ===== Stage 4: QBER and key rate =====
+  log('', 'dim');
+  log('── QBER & SKR ──', 'ok');
+  const errors = errorsByBasis.reduce((s, e) => s + e, 0);
+  const QBER   = same_basis.length > 0 ? errors / same_basis.length : 0;
+  const sift_fraction = accepted.length > 0 ? same_basis.length / accepted.length : 0;
+  const H2_QBER = binaryEntropy(QBER);
+  const raw_SKR = sift_fraction * Math.max(0, 1 - 2 * H2_QBER);
+  const SKR     = raw_SKR * (accepted.length / N);
+  log(`total errors          : ${errors} of ${same_basis.length}`);
+  log(`QBER                  : ${QBER.toFixed(4)}  (${(QBER * 100).toFixed(2)}%)`);
+  log(`h2(QBER)              : ${H2_QBER.toFixed(4)}`);
+  log(`1 - 2*h2(QBER)        : ${(1 - 2*H2_QBER).toFixed(4)}  (negative → no positive SKR)`);
+  log(`sift fraction         : ${sift_fraction.toFixed(4)}`);
+  log(`raw SKR (per accepted): ${raw_SKR.toFixed(4)}`);
+  log(`SKR (per emitted)     : ${SKR.toFixed(4)}`);
+  log(`secure bits estimate  : ${Math.floor(SKR * N)}`);
+
+  // ===== Headline =====
+  log('', 'dim');
+  log('══════════ MODIFIED E91 RESULTS ══════════', 'ok');
+  log(`pairs emitted         : ${N}`);
+  log(`logical coincidences  : ${accepted.length}  (${(accepted.length / N * 100).toFixed(1)}%)`);
+  log(`sifted bits           : ${same_basis.length}`);
+  log(`errors                : ${errors}`);
+  log(`QBER                  : ${(QBER * 100).toFixed(2)}%`);
+  log(`SKR (per emitted)     : ${SKR.toFixed(4)}`);
+  if (QBER < 0.05)      log('status                : SECURE', 'ok');
+  else if (QBER < 0.11) log('status                : MARGINAL — consider aborting', 'warn');
+  else                  log('status                : ABORT — QBER too high', 'err');
+  log('═══════════════════════════════════════', 'ok');
+
+  // ===== p_i histogram =====
+  log('', 'dim');
+  log('── p_i distribution (accepted bias values) ──', 'dim');
+  const bins = 10;
+  const hist = Array(bins).fill(0);
+  for (const p of probs) hist[Math.min(bins - 1, Math.floor(p * bins))]++;
+  const maxH = Math.max(...hist, 1);
+  for (let b = 0; b < bins; b++) {
+    const lo = (b / bins).toFixed(2);
+    const hi = ((b + 1) / bins).toFixed(2);
+    const bar = '█'.repeat(Math.round(hist[b] * 30 / maxH));
+    log(`  p=[${lo},${hi}): ${String(hist[b]).padStart(4)} ${bar}`, 'dim');
+  }
+  log('  (bimodal near 0 and 1 = good; flat or unimodal = poor visibility or bad bounds)', 'dim');
+
+  // ===== detector histogram =====
+  log('', 'dim');
+  log('── detector count distribution ──', 'dim');
+  const dHist = Array(bins).fill(0);
+  const dSpan = (detMax - detMin) || 1;
+  for (const v of detector) dHist[Math.min(bins - 1, Math.floor((v - detMin) / dSpan * bins))]++;
+  const maxD = Math.max(...dHist, 1);
+  for (let b = 0; b < bins; b++) {
+    const lo = (detMin + b * dSpan / bins).toFixed(1);
+    const hi = (detMin + (b+1) * dSpan / bins).toFixed(1);
+    const bar = '█'.repeat(Math.round(dHist[b] * 30 / maxD));
+    const marker = (parseFloat(lo) <= nMin && parseFloat(hi) > nMin) ? ' ← n_min' :
+                   (parseFloat(lo) <= nMax && parseFloat(hi) > nMax) ? ' ← n_max' : '';
+    log(`  [${lo},${hi}): ${String(dHist[b]).padStart(4)} ${bar}${marker}`, 'dim');
+  }
+
+  window.modResults = {
+    QBER, SKR, raw_SKR, sift_fraction, H2_QBER,
+    n_logical: accepted.length, n_sifted: same_basis.length, errors,
+    n_min: nMin, n_max: nMax, span, reps, boundsSource,
+    accepted_indices: accepted, probs,
+    siftedByBasis, errorsByBasis,
+    detStats: { min: detMin, max: detMax, mean: detMean, median: detMed, variance: detVar },
+    basisDist: { alice: basisCountA, bob: basisCountB },
+    bitDist:   { alice: bitCountA,   bob: bitCountB },
+  };
+  log('', 'dim');
+  log('full diagnostics on window.modResults', 'dim');
+}
+
+/* ============================================================
+   Wiring
+   ============================================================ */
+document.getElementById('btnConnect').onclick   = connectWS;
+document.getElementById('btnSetExp').onclick    = setEventCounterExposure;
+document.getElementById('btnPing').onclick      = ping;
+document.getElementById('btnLaserTune').onclick = laserBisectionTune;
+document.getElementById('btnLaserScan').onclick = laserLinearScan;
+document.getElementById('btnLaserSet').onclick  = laserSetManual;
+document.getElementById('btnCalSweep').onclick  = calibrationSweep;
+document.getElementById('btnCalFit').onclick    = fitOffset;
+document.getElementById('btnCalSave').onclick   = saveCalibration;
+document.getElementById('btnGenBases').onclick  = generateBases;
+document.getElementById('btnRunExp').onclick    = runExperiment;
+document.getElementById('btnAbort').onclick     = abort;
+document.getElementById('useIntegration').onchange = (e) => {
+  document.getElementById('packetsPerTrial').disabled = !e.target.checked;
+};
+document.getElementById('btnSaveCsv').onclick   = saveCsv;
+document.getElementById('btnLoadCsv').onclick   = loadCsv;
+document.getElementById('btnSift').onclick      = sift;
+document.getElementById('btnBuckets').onclick   = showBuckets;
+document.getElementById('btnModSift').onclick   = modifiedSift;
+document.getElementById('btnUseFit').onclick    = useFitForBounds;
+document.getElementById('loadInput').onchange   = handleLoad;
+document.getElementById('btnClear').onclick     = () => { logEl().innerHTML = ''; };
+document.getElementById('btnExportLog').onclick = () => {
+  const txt = Array.from(logEl().querySelectorAll('.line')).map(l => l.textContent).join('\n');
+  const blob = new Blob([txt], { type: 'text/plain' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = 'qkd_log_' + new Date().toISOString().replace(/[:.]/g, '-') + '.txt';
+  a.click();
+};
+
+logHead('READY');
+log('quED E91 control panel loaded.', 'dim');
+log('1) Set host/ports, 2) Connect WebSocket, 3) Ping to confirm counts arrive.', 'dim');
+</script>
+</body>
+</html>
