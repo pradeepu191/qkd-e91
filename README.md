@@ -4,10 +4,7 @@ A browser-based control panel for the **Ekert 91** entanglement-based
 quantum key distribution protocol, running on the
 [qutools quED](https://qutools.com/qued/) educational SPDC source.
 
-Built as the MIT 6.2410 final project, Spring 2026.
-
-![control panel screenshot](docs/screenshots/control-panel.png)
-<!-- TODO: drop a screenshot at docs/screenshots/control-panel.png and the line above will render it -->
+Built as part of MIT's 6.2410 final project, Spring 2026.
 
 ## What this is
 
